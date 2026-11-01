@@ -1,0 +1,116 @@
+
+name: Update README Galleries
+
+on:
+  push:
+    paths:
+      - 'Crop_Yield_Prediction/Results/**'
+      - 'Pest_Classification/Results/**'
+      - '.github/workflows/update-readme.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update-readme:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Generate separate galleries
+        run: |
+          python <<'PY'
+          from pathlib import Path
+          from urllib.parse import quote
+          import re
+
+          root = Path.cwd()
+          readme = root / "README.md"
+
+          projects = [
+              {
+                  "directory": "Crop_Yield_Prediction/Results",
+                  "start": "<!-- BEGIN CROP YIELD GALLERY -->",
+                  "end": "<!-- END CROP YIELD GALLERY -->",
+              },
+              {
+                  "directory": "Pest_Classification/Results",
+                  "start": "<!-- BEGIN PEST CLASSIFICATION GALLERY -->",
+                  "end": "<!-- END PEST CLASSIFICATION GALLERY -->",
+              },
+          ]
+
+          content = readme.read_text(encoding="utf-8")
+
+          for project in projects:
+              directory = root / project["directory"]
+
+              images = sorted(
+                  p for p in directory.rglob("*")
+                  if p.is_file() and p.suffix.lower() == ".png"
+              ) if directory.exists() else []
+
+              gallery = []
+
+              for image in images:
+                  relative = image.relative_to(root).as_posix()
+                  image_url = quote(relative, safe="/")
+                  title = image.stem
+
+                  gallery.append(
+                      f"### {title}\n\n"
+                      f"![{title}]({image_url})\n"
+                  )
+
+              generated = (
+                  "\n".join(gallery)
+                  if gallery
+                  else "*No PNG images found.*"
+              )
+
+              pattern = (
+                  re.escape(project["start"])
+                  + r".*?"
+                  + re.escape(project["end"])
+              )
+
+              replacement = (
+                  project["start"]
+                  + "\n\n"
+                  + generated
+                  + "\n\n"
+                  + project["end"]
+              )
+
+              content, count = re.subn(
+                  pattern,
+                  lambda _: replacement,
+                  content,
+                  count=1,
+                  flags=re.DOTALL,
+              )
+
+              if count != 1:
+                  raise RuntimeError(
+                      f"Missing markers for {project['directory']}"
+                  )
+
+          readme.write_text(content, encoding="utf-8")
+
+          print("Both galleries generated successfully.")
+          PY
+
+      - name: Commit README changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add README.md
+
+          if ! git diff --cached --quiet; then
+            git commit -m "Update README result galleries"
+            git push
+          fi

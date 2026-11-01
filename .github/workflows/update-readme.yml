@@ -1,5 +1,5 @@
 
-name: Update README Galleries
+name: Update README and Generate PDF
 
 on:
   push:
@@ -20,7 +20,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Generate separate galleries
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Generate separate README galleries
         run: |
           python <<'PY'
           from pathlib import Path
@@ -99,11 +104,10 @@ jobs:
                   )
 
           readme.write_text(content, encoding="utf-8")
-
           print("Both galleries generated successfully.")
           PY
 
-      - name: Commit README changes
+      - name: Commit updated README
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -114,3 +118,18 @@ jobs:
             git commit -m "Update README result galleries"
             git push
           fi
+
+      - name: Generate README PDF
+        run: |
+          npx --yes md-to-pdf@5.2.5 README.md \
+            --document-title "Internship Projects - IIEST Shibpur" \
+            --pdf-options '{"format":"A4","margin":"15mm","printBackground":true,"preferCSSPageSize":true}' \
+            --launch-options '{"args":["--no-sandbox","--disable-setuid-sandbox"]}'
+
+      - name: Upload PDF artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: README-PDF
+          path: README.pdf
+          if-no-files-found: error
+          retention-days: 30
